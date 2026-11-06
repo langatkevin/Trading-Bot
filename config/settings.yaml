@@ -1,0 +1,33 @@
+# Trading bot configuration. Mode is "backtest" or "paper". "live" is refused unless
+# allow_live is true AND the ALPACA_PAPER env var is "false".
+mode: backtest
+allow_live: false
+
+symbols: [SPY, QQQ, IWM]
+timeframe: 1Day          # 1Min, 5Min, 15Min, 1Hour, 1Day
+start: "2018-01-01"
+end: null                # null = up to the latest available bar
+
+strategy:
+  name: sma_crossover
+  params:
+    fast: 20
+    slow: 50
+    trend: 200           # only go long when price is above this SMA (0 disables)
+
+backtest:
+  initial_cash: 100000
+  fee_bps: 1.0           # commission + regulatory fees, basis points per trade
+  slippage_bps: 2.0      # assumed price impact per trade
+
+risk:
+  max_position_pct: 0.30     # max fraction of equity in one symbol
+  max_gross_exposure: 1.0    # max total long exposure as fraction of equity
+  max_daily_loss_pct: 0.02   # stop opening new trades after a 2% daily loss
+  max_orders_per_day: 20
+  min_order_value: 50        # skip tiny rebalancing orders (dollars)
+  kill_switch_file: KILL_SWITCH   # if this file exists, the bot flattens nothing and trades nothing
+
+paper:
+  poll_seconds: 60
+  state_dir: state

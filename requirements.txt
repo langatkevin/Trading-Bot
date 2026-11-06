@@ -1,0 +1,6 @@
+alpaca-py>=0.45.0
+pandas>=2.2
+numpy>=1.26
+pyyaml>=6.0
+matplotlib>=3.8
+pytest>=8.0
