@@ -7,6 +7,8 @@ account unless `allow_live: true` is set in `config/settings.yaml` *and* `ALPACA
 ## Quick start
 
 ```bash
+python3 -m venv .venv                  # Ubuntu/Debian: sudo apt install python3-venv first
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python -m bot backtest --synthetic     # offline demo, no keys needed
 cp .env.example .env                   # add your Alpaca PAPER keys
