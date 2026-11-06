@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 from .config import Settings
-from .data import fetch_alpaca_bars
+from .data import align, fetch_alpaca_bars
 from .portfolio import target_orders
 from .risk import RiskManager
 from .strategies import make_strategy
@@ -39,6 +39,11 @@ def run_once(settings: Settings, broker, risk: RiskManager, store: StateStore) -
     lookback_days = int(max(strategy.warmup, 50) * 1.6) + 10
     start = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
     bars = fetch_alpaca_bars(settings.symbols, settings.timeframe, start, use_cache=False)
+    if settings.timeframe == "1Day":
+        # Drop today's still-forming daily bar: decisions use completed bars only, like the backtest.
+        today = datetime.now(timezone.utc).date()
+        bars = {s: df[df.index.date < today] for s, df in bars.items()}
+    bars = align(bars)
 
     state = store.load()
     last_bar = {s: str(df.index[-1]) for s, df in bars.items()}
@@ -46,7 +51,7 @@ def run_once(settings: Settings, broker, risk: RiskManager, store: StateStore) -
         log.info("No new completed bar yet; nothing to do")
         return
 
-    signals = {s: float(strategy.signal(df).iloc[-1]) for s, df in bars.items()}
+    signals = {s: float(v) for s, v in strategy.weights(bars).iloc[-1].items()}
     prices = {s: float(df["close"].iloc[-1]) for s, df in bars.items()}
     equity = broker.equity()
     risk.start_bar(datetime.now(timezone.utc).date(), equity)

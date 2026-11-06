@@ -2,6 +2,7 @@
 
     python -m bot backtest               # real Alpaca data (needs keys in .env)
     python -m bot backtest --synthetic   # offline demo on random data
+    python -m bot compare                # backtest every strategy in settings.yaml `compare:`
     python -m bot paper                  # run the paper-trading loop
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ def _load_dotenv(path: str = ".env") -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="bot")
-    parser.add_argument("command", choices=["backtest", "paper"])
+    parser.add_argument("command", choices=["backtest", "compare", "paper"])
     parser.add_argument("--config", default="config/settings.yaml")
     parser.add_argument("--synthetic", action="store_true", help="backtest on random data, no API keys")
     args = parser.parse_args()
@@ -52,8 +53,20 @@ def main() -> None:
             print(f"{k:<16}" + fmt.format(res.metrics[k]) + fmt.format(res.benchmark_metrics[k]))
         print(f"{'trades':<16}{res.metrics['trades']:>14}")
         print(f"{'fees_paid':<16}{res.metrics['fees_paid']:>14.2f}")
-        print(f"{'time_in_market':<16}{res.metrics['time_in_market']:>14.1%}")
+        print(f"{'avg_invested':<16}{res.metrics['avg_invested']:>14.1%}")
         print(f"\nChart saved to {save_report(res)}")
+    elif args.command == "compare":
+        from .compare import compare, format_table
+        from .data import fetch_alpaca_bars, synthetic_bars
+
+        syms = sorted({s for e in settings.compare for s in e.get("symbols", settings.symbols)}
+                      | set(settings.symbols))
+        bars = (synthetic_bars(syms) if args.synthetic else
+                fetch_alpaca_bars(syms, settings.timeframe, settings.start, settings.end))
+        table = compare(settings, bars)
+        idx = next(iter(bars.values())).index
+        print(format_table(table, idx[0], idx[-1]))
+        print("\nChart saved to reports/compare.png")
     else:
         from .runner import run_forever
 

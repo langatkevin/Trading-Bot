@@ -119,3 +119,80 @@ def test_live_trading_refused_without_flag(monkeypatch):
     monkeypatch.setenv("ALPACA_SECRET_KEY", "y")
     with pytest.raises(LiveTradingNotAllowed):
         AlpacaBroker(allow_live=False)
+
+
+# --- strategies v2 -------------------------------------------------------------------------
+
+from bot.strategies import DualMomentum, make_strategy
+from bot.strategies.simple import month_end_mask
+
+
+def test_dual_momentum_weights_valid_and_monthly():
+    bars = synthetic_bars(["A", "B", "C", "D"], n=600)
+    w = DualMomentum(lookback=60, top_n=2).weights(bars)
+    assert (w.sum(axis=1) <= 1 + 1e-9).all()
+    assert set(np.unique(w.values)) <= {0.0, 0.5}
+    changes = w.diff().abs().sum(axis=1) > 0
+    # Weights may only change on month-end bars (the engine then trades at the next open).
+    assert (~changes | month_end_mask(w.index)).all()
+
+
+def test_dual_momentum_no_lookahead():
+    bars = synthetic_bars(["A", "B", "C"], n=500)
+    strat = DualMomentum(lookback=60, top_n=1)
+    full = strat.weights(bars)
+    cut = strat.weights({s: df.iloc[:400] for s, df in bars.items()})
+    # Rows before the cut's final month must match (the last partial month can differ by design).
+    pd.testing.assert_frame_equal(full.iloc[:380], cut.iloc[:380])
+
+
+def test_month_end_mask_last_bar_uses_calendar():
+    idx = pd.bdate_range("2024-01-02", "2024-01-31", tz="UTC")
+    assert month_end_mask(idx).iloc[-1]
+    assert not month_end_mask(idx[:-3]).iloc[-1]
+
+
+def test_every_registered_strategy_backtests():
+    bars = synthetic_bars(["A", "B"], n=400)
+    for name in ["buy_and_hold", "sma_crossover", "trend_filter", "dual_momentum"]:
+        res = run_backtest(bars, make_strategy(name), BacktestConfig(), RiskConfig())
+        assert res.metrics["final_equity"] > 0
+
+
+def test_compare_runs_on_settings(tmp_path):
+    from bot.compare import compare
+
+    s = load_settings("config/settings.yaml")
+    syms = {x for e in s.compare for x in e.get("symbols", s.symbols)} | set(s.symbols)
+    table = compare(s, synthetic_bars(sorted(syms), n=800), out_dir=str(tmp_path))
+    assert len(table) == len(s.compare)
+
+
+class FakeBroker:
+    def __init__(self):
+        self.orders = []
+
+    def equity(self):
+        return 100_000.0
+
+    def positions(self):
+        return {}
+
+    def submit(self, order):
+        self.orders.append(order)
+
+
+def test_runner_trades_once_per_completed_bar(tmp_path, monkeypatch):
+    from bot import runner
+
+    s = load_settings("config/settings.yaml")
+    s.strategy.name, s.strategy.params = "buy_and_hold", {}
+    bars = synthetic_bars(s.symbols, n=300)
+    monkeypatch.setattr(runner, "fetch_alpaca_bars", lambda *a, **k: bars)
+    broker = FakeBroker()
+    store = runner.StateStore(str(tmp_path))
+    rm = RiskManager(RiskConfig(kill_switch_file=str(tmp_path / "KS")))
+    runner.run_once(s, broker, rm, store)
+    assert len(broker.orders) == len(s.symbols)
+    runner.run_once(s, broker, rm, store)  # same bar again: no new orders
+    assert len(broker.orders) == len(s.symbols)

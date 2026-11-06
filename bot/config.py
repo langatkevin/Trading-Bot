@@ -49,6 +49,7 @@ class Settings:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     paper: PaperConfig = field(default_factory=PaperConfig)
+    compare: list[dict[str, Any]] = field(default_factory=list)
 
 
 def load_settings(path: str | Path = "config/settings.yaml") -> Settings:
@@ -64,4 +65,5 @@ def load_settings(path: str | Path = "config/settings.yaml") -> Settings:
         backtest=BacktestConfig(**raw.get("backtest", {})),
         risk=RiskConfig(**raw.get("risk", {})),
         paper=PaperConfig(**raw.get("paper", {})),
+        compare=list(raw.get("compare", [])),
     )

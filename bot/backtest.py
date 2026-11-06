@@ -48,7 +48,7 @@ def run_backtest(bars: dict[str, pd.DataFrame], strategy: Strategy, bt: Backtest
     bars = align(bars)
     symbols = list(bars)
     index = bars[symbols[0]].index
-    signals = {s: strategy.signal(bars[s]) for s in symbols}
+    weights = strategy.weights(bars).reindex(index).fillna(0.0)[symbols]
     opens = pd.DataFrame({s: bars[s]["open"] for s in symbols})
     closes = pd.DataFrame({s: bars[s]["close"] for s in symbols})
 
@@ -61,8 +61,8 @@ def run_backtest(bars: dict[str, pd.DataFrame], strategy: Strategy, bt: Backtest
         open_px = opens.iloc[i].to_dict()
         risk.start_bar(t.date(), equity_curve[-1])
         eq_open = broker.equity(open_px)
-        sig = {s: float(signals[s].iloc[i - 1]) for s in symbols}
-        orders = target_orders(sig, open_px, broker.positions, eq_open, risk)
+        w = weights.iloc[i - 1].to_dict()
+        orders = target_orders(w, open_px, broker.positions, eq_open, risk)
         for order in risk.approve(orders, eq_open):
             broker.submit(order, open_px[order.symbol], time=t)
         equity_curve.append(broker.equity(closes.iloc[i].to_dict()))
@@ -77,8 +77,7 @@ def run_backtest(bars: dict[str, pd.DataFrame], strategy: Strategy, bt: Backtest
     metrics = compute_metrics(equity, ppy)
     metrics["trades"] = len(fills)
     metrics["fees_paid"] = float(fills["fee"].sum()) if len(fills) else 0.0
-    in_market = sum(1 for s in symbols for v in signals[s] if v > 0) / (len(index) * len(symbols))
-    metrics["time_in_market"] = float(in_market)
+    metrics["avg_invested"] = float(weights.sum(axis=1).iloc[strategy.warmup:].mean())
     return BacktestResult(equity, benchmark, fills, metrics, compute_metrics(benchmark, ppy), risk.state.log)
 
 

@@ -5,7 +5,7 @@ allow_live: false
 
 symbols: [SPY, QQQ, IWM]
 timeframe: 1Day          # 1Min, 5Min, 15Min, 1Hour, 1Day
-start: "2018-01-01"
+start: "2016-01-01"     # Alpaca free SIP data goes back to 2016
 end: null                # null = up to the latest available bar
 
 strategy:
@@ -21,7 +21,7 @@ backtest:
   slippage_bps: 2.0      # assumed price impact per trade
 
 risk:
-  max_position_pct: 0.30     # max fraction of equity in one symbol
+  max_position_pct: 0.50     # max fraction of equity in one symbol
   max_gross_exposure: 1.0    # max total long exposure as fraction of equity
   max_daily_loss_pct: 0.02   # stop opening new trades after a 2% daily loss
   max_orders_per_day: 20
@@ -31,3 +31,17 @@ risk:
 paper:
   poll_seconds: 60
   state_dir: state
+
+# `python -m bot compare` backtests every entry below on the same dates and prints one table.
+# Each entry: label, strategy name, params, and optionally its own symbols (default: `symbols` above).
+compare:
+# Benchmarks ignore the position cap (risk override) so they are true buy-and-hold.
+  - {label: "Buy & hold SPY", name: buy_and_hold, symbols: [SPY], risk: {max_position_pct: 1.0}}
+  - {label: "Buy & hold SPY/QQQ/IWM", name: buy_and_hold, risk: {max_position_pct: 1.0}}
+  - {label: "SMA crossover (current)", name: sma_crossover, params: {fast: 20, slow: 50, trend: 200}}
+  - {label: "Trend filter 200d", name: trend_filter, params: {sma: 200}}
+  - {label: "Momentum SPY/QQQ/IWM", name: dual_momentum, params: {lookback: 126, top_n: 2}}
+  - {label: "Momentum + bonds/gold", name: dual_momentum, params: {lookback: 126, top_n: 2},
+     symbols: [SPY, QQQ, IWM, EFA, TLT, GLD]}
+  - {label: "Momentum 12-1 + bonds/gold", name: dual_momentum, params: {lookback: 231, skip: 21, top_n: 2},
+     symbols: [SPY, QQQ, IWM, EFA, TLT, GLD]}

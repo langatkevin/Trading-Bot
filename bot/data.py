@@ -39,14 +39,16 @@ def fetch_alpaca_bars(symbols: list[str], timeframe: str, start: str, end: str |
     if not missing:
         return out
 
+    # Alpaca's free plan serves full SIP history as long as the request ends 15+ minutes ago.
+    end_ts = pd.Timestamp(end, tz="UTC") if end else pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=20)
     client = StockHistoricalDataClient(os.environ["ALPACA_API_KEY"], os.environ["ALPACA_SECRET_KEY"])
     req = StockBarsRequest(
         symbol_or_symbols=missing,
         timeframe=_alpaca_timeframe(timeframe),
         start=pd.Timestamp(start, tz="UTC").to_pydatetime(),
-        end=pd.Timestamp(end, tz="UTC").to_pydatetime() if end else None,
+        end=end_ts.to_pydatetime(),
         adjustment=Adjustment.ALL,
-        feed=DataFeed.IEX,  # free feed; switch to SIP with a paid data plan
+        feed=DataFeed.SIP,  # all US exchanges; history back to 2016
     )
     df = client.get_stock_bars(req).df
     CACHE_DIR.mkdir(exist_ok=True)
